@@ -1,0 +1,411 @@
+<?php
+/*
+* Copyright (c) 2014 Devender Kumar
+* For more information follow the documentation here : 
+* https://www.igniterealtime.org/projects/openfire/plugins/userservice/readme.html
+* All Plugins List 
+* https://www.igniterealtime.org/projects/openfire/plugins.jsp
+*/
+
+
+/**
+ * A PHP class for use with the OpenFire UserService plugin.
+ * Firstly you need to enable the user plugins in openfire 
+ */
+class OpenFireLib
+{
+    /**
+     * Simple construct
+	 * 
+     */
+    public function __construct() {	
+		// here will go your code 
+	}
+
+    /**
+     * Stores a configuration parameter
+     *
+     * @param	string					$name	Name
+     * @return	string|bool|int|null			Get parameter
+	 *
+     */
+    public function __get($name)
+    {
+        if (array_key_exists($name, $this->config)) {
+            return $this->config[$name];
+        }
+        return null;
+    }
+
+    /**
+     * Grabs a configuration parameter
+     *
+     * @param	string				$name	Name
+     * @param	string|bool|int		$value	Value
+
+	 *
+     */
+    public function __set($name, $value)
+    {
+        $this->config[$name] = $value;
+    }
+	
+    /**
+     * Stores all the default configuration of openfire.
+     * @var		array	$config
+	 *
+     */
+    private $settings = array(
+        'host'			=> 'example.com', 						// your host name 
+        'port'			=> '9090',        						// your port for openfire 
+        'plugin'		=> '/plugins/userService/userservice', 
+        'secret'		=> 'lPXsFAX5', 							// your openfire secret 
+        'useSSL'		=> false,
+        'subscriptions'	=> array(-1, 0)
+    );
+
+
+    /**
+     * Main function to send the data to Openfire and perform action 
+     *
+     * @param	string[]		$parameters		Parameters
+     * @return	array|false						Array with data or error, or False when something went fully wrong
+	 *
+     */
+    private function sendRequest($parameters = array())
+    {
+        $base = ($this->useSSL) ? "https" : "http";
+        $url = $base . "://" . $this->host;
+	
+        $result = $this->curlRequest($url, $parameters);
+	
+        if($result === false) {
+            return false;
+        } else {
+            return $this->checkResult($result);
+        }
+    }
+	
+	/**
+     * Sends all POST data to OpenFire's UserService using cURL
+	 *
+     * NOTICE : make sure curl is enable in your server otherwise it will not work and did note show you any result.
+	 *
+     * @param	string		$url			URL
+     * @param	string[]	$parameters		Parameters
+     * @return	string|false				Callback data from cURL request
+	 *
+     */
+    private function curlRequest($url, $parameters)
+    {
+	
+		$fullUrl = $url . ":" . $this->port . $this->plugin . "?" . http_build_query($parameters);	
+		
+		$ch = curl_init($fullUrl);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
+		$output = curl_exec($ch);
+		
+		if($output == 'ok'){
+            $result = $output;		
+		}else{
+            $result = $output;
+        }
+		
+        return $result;
+		
+    }
+
+    /**
+     * Check the result if get any error will detect and show it to users 
+     *
+     * @param	string			$result		Result
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+     */
+    private function checkResult($result)
+    {
+	
+        if(preg_match('#^<error>([A-Za-z0-9 ]+)</error>#', $result, $matches)) {
+            return array(
+                'result'	=> false,
+                'message'	=> $matches[1]
+            );
+			
+        } elseif(preg_match('#^<result>([A-Za-z0-9 ]+)</result>#', $result, $matches)) {
+		
+            return array(
+                'result'	=> true,
+                'message'	=> $matches[1]
+            );
+			
+        } else {
+            return false;
+        }
+		
+    }
+
+    
+    /**
+     * Creates a new OpenFire user
+     *
+     * @param	string			$username	Username that will get from POST data 
+     * @param	string			$password	Password random generate password 
+     * @param	string|false	$name		Name	(Optional) name of the users 
+     * @param	string|false	$email		Email	(Optional) email of the users 
+     * @param	string[]|false	$groups		Groups	(Optional) group if any exist 
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function insertUser($username, $password, $name = false, $email = false, $groups = false)
+    {
+	
+        $parameters = array(
+            'type'		=> 'add',
+            'secret'	=> $this->secret,
+            'username'	=> $username,
+            'password'	=> $password
+        );
+	
+        // Name add request
+        $this->addString($parameters, 'name', $name);
+
+        // Email add request
+        $this->addEmail($parameters, $email);
+
+        // Groups add request
+        $this->addGroups($parameters, $groups);
+		
+        return $this->sendRequest($parameters);
+		
+    }
+
+    /**
+     * Deletes an OpenFire from Openfire using his name 
+     *
+     * @param	string			$username	Username
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function deleteUser($username)
+    {
+	
+        return $this->sendRequest(array(
+            'type'		=> 'delete',
+            'secret'	=> $this->secret,
+            'username'	=> $username
+        ));
+    }
+
+    /**
+     * Disables an OpenFire user using his username 
+     *
+     * @param	string			$username	Username
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function disableUser($username)
+    {
+        return $this->sendRequest(array(
+            'type'		=> 'disable',
+            'secret'	=> $this->secret,
+            'username'	=> $username
+        ));
+    }
+
+    /**
+     * Enables an OpenFire using his user name 
+     *
+     * @param	string			$username	Username
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function enableUser($username)
+    {
+        return $this->sendRequest(array(
+            'type'		=> 'enable',
+            'secret'	=> $this->secret,
+            'username'	=> $username
+        ));
+    }
+
+    /**
+     * Updates an OpenFire user to change the Openfire users data 
+     *
+     * @param	string			$username	Username
+     * @param	string|false	$password	Password (Optional)
+     * @param	string|false	$name		Name (Optional)
+     * @param	string|false	$email		Email (Optional)
+     * @param	string[]|false	$groups		Groups (Optional)
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+     */
+    public function updateUser($username, $password = false, $name = false, $email = false, $groups = false)
+    {
+        $parameters = array(
+            'type'		=> 'update',
+            'secret'	=> $this->secret,
+            'username'	=> $username
+        );
+
+        // Password change request
+        $this->addString($parameters, 'password', $password);
+
+        // Name change request
+        $this->addString($parameters, 'name', $name);
+
+        // Email change request
+        $this->addEmail($parameters, $email);
+
+        // Groups change request
+        $this->addGroups($parameters, $groups);
+
+        return $this->sendRequest($parameters);
+    }
+
+    /**
+     * Adds to this OpenFire user's roster
+     *
+     * @param	string			$username		Username
+     * @param	string			$itemJid		Item JID
+     * @param	string|false	$name			Name		 (Optional)
+     * @param	int|false		$subscription	Subscription (Optional)
+     * @return	array|false						Array with data or error, or False when something went fully wrong
+     */
+    public function addToRoster($username, $itemJid, $name = false, $subscription = false)
+    {
+	
+        $parameters = array(
+            'type'			=> 'add_roster',
+            'secret'		=> $this->secret,
+            'username'		=> $username,
+            'item_jid'		=> $itemJid
+        );
+
+        // Name update request
+        $this->addString($parameters, 'name', $name);
+		// Subscription update request
+        $this->addSubscription($parameters, $subscription);
+
+        return $this->sendRequest($parameters);
+		
+    }
+
+    /**
+     * Updates this OpenFire user's roster
+     *
+     * @param	string			$username		Username
+     * @param	string			$itemJid		Item JID
+     * @param	string|false	$name			Name		 (Optional)
+     * @param	int|false		$subscription	Subscription (Optional)
+     * @return	array|false						Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function updateRoster($username, $itemJid, $name = false, $subscription = false)
+    {
+        $parameters = array(
+            'type'			=> 'update_roster',
+            'secret'		=> $this->secret,
+            'username'		=> $username,
+            'item_jid'		=> $itemJid
+        );
+
+        // Name update request
+        $this->addString($parameters, 'name', $name);
+
+        // Subscription update request
+        $this->addSubscription($parameters, $subscription);
+
+        return $this->sendRequest($parameters);
+		
+    }
+
+    /**
+     * Removes from this OpenFire user's roster
+     *
+     * @param	string			$username	Username
+     * @param	string			$itemJid	Item JID
+     * @return	array|false					Array with data or error, or False when something went fully wrong
+	 *
+     */
+    public function deleteFromRoster($username, $itemJid)
+    {
+        return $this->sendRequest(array(
+            'type'			=> 'delete_roster',
+            'secret'		=> $this->secret,
+            'username'		=> $username,
+            'item_jid'		=> $itemJid
+        ));
+    }
+
+    /**
+     * Add a possible parameter
+     *
+     * @param	string[]					$parameters		Parameters
+     * @param	string						$paramName		Parameter name
+     * @param	string|int|bool|string[]	$paramValue		Parameter value
+     */
+    private function addParameter(&$parameters, $paramName, $paramValue)
+    {
+	
+        $parameters = array_merge($parameters, array(
+            $paramName => $paramValue
+        ));
+		
+    }
+
+    /**
+     * Add a possible string parameter
+     *
+     * @param	string[]		$parameters		Parameters
+     * @param	string			$paramName		Parameter name
+     * @param	string|false	$paramValue		Parameter value
+	 *
+     */
+    private function addString(&$parameters, $paramName, $paramValue)
+    {
+        if(!empty($paramValue) && is_string($paramValue)) {
+            $this->addParameter($parameters, $paramName, $paramValue);
+        }
+    }
+
+    /**
+     * Add email parameter to openfire 
+     *
+     * @param	string[]		$parameters		Parameters
+     * @param	string|false	$paramValue		Parameter value
+	 *
+     */
+    private function addEmail(&$parameters, $paramValue)
+    {
+        if(filter_var($paramValue, FILTER_VALIDATE_EMAIL) !== false) {
+            $this->addParameter($parameters, 'email', $paramValue);
+        }
+    }
+
+    /**
+     * Add subscription parameter to openfire 
+     *
+     * @param	string[]	$parameters		Parameters
+     * @param	int|false	$paramValue		Parameter value
+
+     */
+    private function addSubscription(&$parameters, $paramValue)
+    {
+        if($paramValue !== false && in_array($paramValue, $this->subscriptions)) {
+            $this->addParameter($parameters, 'subscription', $paramValue);
+        }
+    }
+
+    /**
+     * Add groups parameter for openfire 
+     *
+     * @param	string[]		$parameters		Parameters
+     * @param	string[]|false	$paramValue		Parameter value
+	 *
+     */
+    private function addGroups(&$parameters, $paramValue)
+    {
+        if(is_array($paramValue) && !empty($paramValue)) {
+            $this->addParameter($parameters, 'groups', implode(',', $paramValue));
+        }
+    }
+}
