@@ -1,5 +1,5 @@
 <?php 
-require_once ('lib/OpenFireLib.php');
+require_once ('OpenFireLib.php');
 					
 // Create the OpenFireUserService object.
 $pofus = new OpenFireLib();
